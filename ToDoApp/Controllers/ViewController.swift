@@ -6,9 +6,10 @@
 //
 
 import UIKit
+import CoreData
 
 class ViewController: UIViewController {
-    var todoArray = [String]()
+    var todoArray = [NSManagedObject]()
     @IBOutlet weak var tableView: UITableView!
     var alertController = UIAlertController()
     
@@ -16,6 +17,8 @@ class ViewController: UIViewController {
         super.viewDidLoad()
         tableView.delegate = self
         tableView.dataSource = self
+        fetch()
+        
     }
     
     
@@ -29,9 +32,15 @@ class ViewController: UIViewController {
                      cancelButtonTitle: "Vazgeç",
                      isTextFieldAvaible: false,
                      defaultButtonHandler: { _ in
-            self.todoArray.removeAll()
-            self.tableView.reloadData()
+            let appDelegate = UIApplication.shared.delegate as? AppDelegate
+            let managedObjectContext = appDelegate?.persistentContainer.viewContext
+            let fetchRequest = NSFetchRequest<NSFetchRequestResult>(entityName: "ListItem")
+            let deleteAll = NSBatchDeleteRequest(fetchRequest: fetchRequest)
+            
+            try! managedObjectContext?.execute(deleteAll)
+            self.fetch()
         })
+        
     }
     
     
@@ -45,8 +54,22 @@ class ViewController: UIViewController {
             let text = self.alertController.textFields?.first?.text
             
             if text != "" {
-                self.todoArray.append((text)!)
-                self.tableView.reloadData()
+                let appDelegeta = UIApplication.shared.delegate as? AppDelegate
+                
+                let managedObjectContext = appDelegeta?.persistentContainer.viewContext
+                
+                let entity = NSEntityDescription.entity(forEntityName: "ListItem",
+                                                        in: managedObjectContext!)
+                
+                let listItem = NSManagedObject(entity: entity!,
+                                               insertInto: managedObjectContext!)
+                
+                listItem.setValue(text,
+                                  forKey: "title")
+                
+                try? managedObjectContext?.save()
+                
+                self.fetch()
             } else {
                 self.presentWarningAlert()
             }
@@ -91,7 +114,17 @@ class ViewController: UIViewController {
         
         present(alertController, animated: true)
     }
-    
+    func fetch(){
+        
+        let appDelegate = UIApplication.shared.delegate as? AppDelegate
+        let managedObjectContext = appDelegate?.persistentContainer.viewContext
+        let fetchRequest = NSFetchRequest<NSManagedObject>(entityName: "ListItem")
+        
+        
+        todoArray = try! managedObjectContext!.fetch(fetchRequest)
+        
+        tableView.reloadData()
+    }
 }
 
 extension ViewController: UITableViewDelegate, UITableViewDataSource {
@@ -102,14 +135,21 @@ extension ViewController: UITableViewDelegate, UITableViewDataSource {
     
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let cell = tableView.dequeueReusableCell(withIdentifier: "defaultCell", for: indexPath)
-        cell.textLabel?.text = todoArray[indexPath.row]
+        let listItem = todoArray[indexPath.row]
+        cell.textLabel?.text = listItem.value(forKey: "title") as? String
         return cell
     }
     
     func tableView(_ tableView: UITableView, trailingSwipeActionsConfigurationForRowAt indexPath: IndexPath) -> UISwipeActionsConfiguration? {
         let deleteAction = UIContextualAction(style: .normal, title: "sil") { _, _, _ in
-            self.todoArray.remove(at: indexPath.row)
-            tableView.reloadData()
+            let appDelegate = UIApplication.shared.delegate as? AppDelegate
+            let managedObjectContext = appDelegate?.persistentContainer.viewContext
+            managedObjectContext?.delete(self.todoArray[indexPath.row])
+            try? managedObjectContext?.save()
+            
+            self.fetch()
+            
+            
         }
         
         let editAction = UIContextualAction(style: .normal, title: "Düzenle") { _, _, _ in
@@ -122,7 +162,14 @@ extension ViewController: UITableViewDelegate, UITableViewDataSource {
                 let text = self.alertController.textFields?.first?.text
                 
                 if text != "" {
-                    self.todoArray[indexPath.row] = text!
+                    let appDelegate = UIApplication.shared.delegate as? AppDelegate
+                    let managedObjectContext = appDelegate?.persistentContainer.viewContext
+                    
+                    self.todoArray[indexPath.row].setValue(text, forKey: "title")
+                    
+                    if managedObjectContext!.hasChanges {
+                        try? managedObjectContext?.save()
+                    }
                     self.tableView.reloadData()
                 } else {
                     self.presentWarningAlert()
